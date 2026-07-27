@@ -105,7 +105,7 @@
               issuer = account.publicUrl;
               client_id = account.clientId;
               resource = account.jmapUrl;
-              token_endpoint = "${account.publicUrl}/oauth/token";
+              token_endpoint = "${account.publicUrl}/auth/token";
               redirect_uri = account.redirectUri;
             };
             email_addresses = account.emailAddresses;
