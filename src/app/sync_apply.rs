@@ -169,6 +169,12 @@ impl AppModel {
                     label: cfg.label.clone(),
                     jmap_url: cfg.jmap_url.clone(),
                     username: cfg.username.clone(),
+                    client_id: match &cfg.auth {
+                        neverlight_mail_core::config::AuthMethod::OAuth { client_id, .. } => {
+                            client_id.clone()
+                        }
+                        _ => String::new(),
+                    },
                     error: e.clone(),
                 }
             } else {

@@ -43,6 +43,79 @@
       ...
     }: let
       cfg = config.programs.neverlight-mail;
+      json = pkgs.formats.json {};
+      accountModule = {
+        options = {
+          id = lib.mkOption {
+            type = lib.types.str;
+            description = "Stable Neverlight account id used for keyring entries.";
+          };
+          label = lib.mkOption {
+            type = lib.types.str;
+            default = "";
+            description = "Human-readable account label.";
+          };
+          publicUrl = lib.mkOption {
+            type = lib.types.str;
+            description = "Public Stalwart URL hosting the OAuth authorization server.";
+          };
+          jmapUrl = lib.mkOption {
+            type = lib.types.str;
+            description = "JMAP session resource URL.";
+          };
+          username = lib.mkOption {
+            type = lib.types.str;
+            description = "Mail account username.";
+          };
+          clientId = lib.mkOption {
+            type = lib.types.str;
+            default = "neverlight-mail";
+            description = "Pre-registered Stalwart OAuth client id.";
+          };
+          redirectUri = lib.mkOption {
+            type = lib.types.str;
+            default = "http://127.0.0.1:49152/callback";
+            description = "Exact loopback callback URI registered for this client.";
+          };
+          emailAddresses = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [];
+            description = "Addresses associated with the account.";
+          };
+          maxMessagesPerMailbox = lib.mkOption {
+            type = lib.types.nullOr lib.types.ints.positive;
+            default = null;
+            description = "Optional backfill limit per mailbox.";
+          };
+        };
+      };
+      configFile = json.generate "neverlight-mail-config.json" {
+        accounts = lib.mapAttrsToList (name: account:
+          {
+            id = account.id;
+            label =
+              if account.label == ""
+              then name
+              else account.label;
+            jmap_url = account.jmapUrl;
+            username = account.username;
+            managed = true;
+            auth = {
+              backend = "oauth";
+              issuer = account.publicUrl;
+              client_id = account.clientId;
+              resource = account.jmapUrl;
+              token_endpoint = "${account.publicUrl}/oauth/token";
+              redirect_uri = account.redirectUri;
+            };
+            email_addresses = account.emailAddresses;
+            capabilities = {};
+          }
+          // lib.optionalAttrs (account.maxMessagesPerMailbox != null) {
+            max_messages_per_mailbox = account.maxMessagesPerMailbox;
+          })
+        cfg.accounts;
+      };
     in {
       options.programs.neverlight-mail = {
         enable = lib.mkEnableOption "Neverlight Mail";
@@ -52,10 +125,22 @@
           defaultText = lib.literalExpression "self.packages.<system>.default";
           description = "Package to install for Neverlight Mail.";
         };
+        accounts = lib.mkOption {
+          type = lib.types.attrsOf (lib.types.submodule accountModule);
+          default = {};
+          description = "Declarative OAuth accounts. Refresh tokens remain in the OS keyring.";
+        };
       };
 
       config = lib.mkIf cfg.enable {
+        assertions = [
+          {
+            assertion = cfg.accounts != {};
+            message = "programs.neverlight-mail.accounts must contain at least one declarative account.";
+          }
+        ];
         home.packages = [cfg.package];
+        xdg.configFile."neverlight-mail/config.json".source = configFile;
       };
     };
   in

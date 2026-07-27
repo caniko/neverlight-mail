@@ -577,6 +577,7 @@ pub struct OAuthTokenResult {
     pub client_id: String,
     pub token_endpoint: String,
     pub resource: String,
+    pub redirect_uri: String,
     pub access_token: String,
     pub refresh_token: String,
 }
@@ -601,6 +602,7 @@ mod tests {
             label: "Test".into(),
             jmap_url: "https://example.com/.well-known/jmap".into(),
             username: "user@example.com".into(),
+            managed: false,
             auth: neverlight_mail_core::config::AuthMethod::AppPassword {
                 token: "tok".into(),
             },

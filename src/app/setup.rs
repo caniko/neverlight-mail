@@ -11,6 +11,19 @@ use neverlight_mail_core::setup::{self, FieldId, SetupInput, SetupRequest};
 
 use super::{AccountState, AppModel, ConnectionState, Message, OAuthSetupPhase, OAuthTokenResult};
 
+fn loopback_redirect_port(uri: &str) -> Result<u16, String> {
+    let port = uri
+        .strip_prefix("http://127.0.0.1:")
+        .and_then(|rest| rest.strip_suffix("/callback"))
+        .ok_or_else(|| "declarative OAuth redirect must be http://127.0.0.1:<port>/callback".to_string())?
+        .parse::<u16>()
+        .map_err(|_| format!("invalid OAuth redirect port in {uri}"))?;
+    if port == 0 {
+        return Err("declarative OAuth redirect port must be non-zero".into());
+    }
+    Ok(port)
+}
+
 impl AppModel {
     /// Access the setup model, panicking if absent. Only call when you've
     /// already checked `self.setup_model.is_some()`.
@@ -124,6 +137,7 @@ impl AppModel {
             label: label.clone(),
             jmap_url: jmap_url.clone(),
             username: username.clone(),
+            managed: false,
             auth: token_backend,
             email_addresses: email_addresses.clone(),
             capabilities: AccountCapabilities::default(),
@@ -151,6 +165,7 @@ impl AppModel {
             label: label.clone(),
             jmap_url,
             username,
+            managed: false,
             auth: AuthMethod::AppPassword { token },
             email_addresses,
             capabilities: AccountCapabilities::default(),
@@ -163,6 +178,23 @@ impl AppModel {
     /// Start full OAuth flow: discover → register → browser auth → token exchange.
     fn handle_oauth_start(&mut self) -> Task<Message> {
         let jmap_url = self.setup().jmap_url.trim().to_string();
+        let static_oauth = match &self.setup().request {
+            SetupRequest::Reauth { account_id, .. } => MultiAccountFileConfig::load()
+                .ok()
+                .flatten()
+                .and_then(|multi| {
+                    multi.accounts.into_iter().find(|account| account.id == *account_id)
+                })
+                .and_then(|account| match account.auth {
+                    AuthBackend::OAuth {
+                        client_id,
+                        redirect_uri: Some(redirect_uri),
+                        ..
+                    } => Some((client_id, redirect_uri)),
+                    _ => None,
+                }),
+            _ => None,
+        };
 
         if jmap_url.is_empty() || !jmap_url.starts_with("https://") {
             self.setup_mut().error = Some("JMAP URL required for OAuth discovery".into());
@@ -175,10 +207,25 @@ impl AppModel {
 
         cosmic::task::future(async move {
             let result: Result<OAuthTokenResult, String> = async {
-                // Bind redirect listener first (OS-assigned port)
-                let redirect =
-                    neverlight_mail_oauth::LocalServerRedirect::bind("Neverlight Mail").await
-                        .map_err(|e| e.to_string())?;
+                // Pre-registered clients use their exact declarative callback;
+                // first-run dynamic registration keeps the OS-assigned port.
+                let redirect = if let Some((_, uri)) = &static_oauth {
+                    let port = loopback_redirect_port(uri)?;
+                    let redirect = neverlight_mail_oauth::LocalServerRedirect::bind_on(
+                        "Neverlight Mail",
+                        port,
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                    if redirect.redirect_uri() != *uri {
+                        return Err(format!("unsupported OAuth redirect URI: {uri}"));
+                    }
+                    redirect
+                } else {
+                    neverlight_mail_oauth::LocalServerRedirect::bind("Neverlight Mail")
+                        .await
+                        .map_err(|e| e.to_string())?
+                };
 
                 let app_info = AppInfo {
                     client_name: "Neverlight Mail".into(),
@@ -188,14 +235,23 @@ impl AppModel {
                     redirect_uri: redirect.redirect_uri(),
                 };
 
-                // Discover + register
-                let flow = neverlight_mail_oauth::OAuthFlow::discover_and_register(
-                    &jmap_url,
-                    &app_info,
-                    "urn:ietf:params:oauth:scope:mail",
-                )
-                .await
-                .map_err(|e| e.to_string())?;
+                let flow = match &static_oauth {
+                    Some((client_id, _)) => neverlight_mail_oauth::OAuthFlow::discover_with_client_id(
+                        &jmap_url,
+                        client_id,
+                        &redirect.redirect_uri(),
+                        "urn:ietf:params:oauth:scope:mail",
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?,
+                    None => neverlight_mail_oauth::OAuthFlow::discover_and_register(
+                        &jmap_url,
+                        &app_info,
+                        "urn:ietf:params:oauth:scope:mail",
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?,
+                };
 
                 // Open browser and wait for authorization
                 let token_set = flow.authorize(&redirect).await.map_err(|e| e.to_string())?;
@@ -207,6 +263,7 @@ impl AppModel {
                     client_id: flow.client_id().to_string(),
                     token_endpoint: flow.token_endpoint().to_string(),
                     resource: flow.resource().to_string(),
+                    redirect_uri: redirect.redirect_uri(),
                     access_token: token_set.access_token,
                     refresh_token,
                 })
@@ -260,6 +317,17 @@ impl AppModel {
             match neverlight_mail_core::keyring::set_oauth_refresh(&account_id, &tokens.refresh_token) {
                 Ok(()) => None,
                 Err(e) => {
+                    if self
+                        .setup()
+                        .account_id()
+                        .and_then(|id| MultiAccountFileConfig::load().ok().flatten().map(|m| (id.to_string(), m)))
+                        .and_then(|(id, m)| m.accounts.into_iter().find(|a| a.id == id))
+                        .is_some_and(|account| account.managed)
+                    {
+                        self.oauth_phase = OAuthSetupPhase::Inactive;
+                        self.oauth_error = Some(format!("OAuth keyring unavailable: {e}"));
+                        return Task::none();
+                    }
                     log::warn!("Keyring unavailable for OAuth ({}), using plaintext", e);
                     Some(tokens.refresh_token.clone())
                 }
@@ -272,6 +340,7 @@ impl AppModel {
             .unwrap_or(MultiAccountFileConfig { accounts: Vec::new() });
 
         let existing = multi.accounts.iter().find(|a| a.id == account_id);
+        let managed = existing.is_some_and(|account| account.managed);
         let (caps, max_msgs, emails_resolved) = if let Some(ex) = existing {
             (
                 ex.capabilities.clone(),
@@ -287,11 +356,13 @@ impl AppModel {
             label: label.clone(),
             jmap_url: jmap_url.clone(),
             username: username.clone(),
+            managed,
             auth: AuthBackend::OAuth {
                 issuer: tokens.issuer.clone(),
                 client_id: tokens.client_id.clone(),
                 resource: tokens.resource.clone(),
                 token_endpoint: tokens.token_endpoint.clone(),
+                redirect_uri: Some(tokens.redirect_uri.clone()),
                 refresh_token_plaintext,
             },
             email_addresses: emails_resolved,
@@ -299,17 +370,19 @@ impl AppModel {
             max_messages_per_mailbox: max_msgs,
         };
 
-        if let Some(pos) = multi.accounts.iter().position(|a| a.id == account_id) {
-            multi.accounts[pos] = fac;
-        } else {
-            multi.accounts.push(fac);
-        }
-        if let Err(e) = multi.save() {
-            log::error!("Failed to save OAuth config: {}", e);
-            if let Some(m) = self.setup_model.as_mut() {
-                m.error = Some(format!("Failed to save config: {e}"));
+        if !managed {
+            if let Some(pos) = multi.accounts.iter().position(|a| a.id == account_id) {
+                multi.accounts[pos] = fac;
+            } else {
+                multi.accounts.push(fac);
             }
-            return Task::none();
+            if let Err(e) = multi.save() {
+                log::error!("Failed to save OAuth config: {}", e);
+                if let Some(m) = self.setup_model.as_mut() {
+                    m.error = Some(format!("Failed to save config: {e}"));
+                }
+                return Task::none();
+            }
         }
 
         let account_config = AccountConfig {
@@ -317,10 +390,12 @@ impl AppModel {
             label: label.clone(),
             jmap_url,
             username,
+            managed,
             auth: AuthMethod::OAuth {
                 issuer: tokens.issuer,
                 client_id: tokens.client_id,
                 token_endpoint: tokens.token_endpoint,
+                redirect_uri: Some(tokens.redirect_uri),
                 refresh_token: tokens.refresh_token,
                 access_token: Some(tokens.access_token),
                 resource: tokens.resource,

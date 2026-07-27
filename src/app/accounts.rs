@@ -333,6 +333,7 @@ impl AppModel {
                 label: a.config.label.clone(),
                 jmap_url: a.config.jmap_url.clone(),
                 username: a.config.username.clone(),
+                managed: a.config.managed,
                 auth: AuthBackend::Keyring,
                 email_addresses: a.config.email_addresses.clone(),
                 capabilities: a.config.capabilities.clone(),
