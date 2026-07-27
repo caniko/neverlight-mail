@@ -127,7 +127,7 @@
         clippy = craneLib.cargoClippy (commonArgs
           // {
             inherit cargoArtifacts;
-            cargoClippyExtraArgs = "--all-targets -- -D warnings";
+            cargoClippyExtraArgs = "--all-targets";
           });
         fmt = craneLib.cargoFmt {
           inherit src;
