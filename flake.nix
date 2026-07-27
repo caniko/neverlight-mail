@@ -64,14 +64,14 @@
         inherit system;
         overlays = [(import rust-overlay)];
       };
-        toolchain = rs-harbor.lib.mkToolchain {
-          inherit pkgs;
-          # The upstream CI uses stable; keep the package reproducible without
-          # requiring nightly-only compiler behavior.
-          channel = "stable";
-          extensions = ["rust-src" "rustfmt" "llvm-tools-preview"];
-          withRustAnalyzer = false;
-        };
+      toolchain = rs-harbor.lib.mkToolchain {
+        inherit pkgs;
+        # The upstream CI uses stable; keep the package reproducible without
+        # requiring nightly-only compiler behavior.
+        channel = "stable";
+        extensions = ["rust-src" "rustfmt" "llvm-tools-preview"];
+        withRustAnalyzer = false;
+      };
       inherit (toolchain) craneLib;
       cross = rs-harbor.lib.mkCross {
         inherit pkgs system;
@@ -109,7 +109,7 @@
             install -Dm644 ${./resources/com.neverlight.email.metainfo.xml} \
               "$out/share/metainfo/com.neverlight.email.metainfo.xml"
             mkdir -p "$out/share/icons"
-            cp -r ${./resources/icons}/. "$out/share/icons/"
+            cp -r --no-preserve=mode ${./resources/icons}/. "$out/share/icons/"
           '';
           meta = {
             description = "A COSMIC desktop email client";
