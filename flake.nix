@@ -127,7 +127,9 @@
         clippy = craneLib.cargoClippy (commonArgs
           // {
             inherit cargoArtifacts;
-            cargoClippyExtraArgs = "--all-targets";
+            # The upstream snapshot has these two existing lints; keep the
+            # check strict for all other warnings without changing Rust code.
+            cargoClippyExtraArgs = "--all-targets -- -D warnings -A clippy::too_many_arguments -A clippy::unnecessary_map_or";
           });
         fmt = craneLib.cargoFmt {
           inherit src;
