@@ -222,13 +222,27 @@
         };
       };
 
-      devShells.default = rs-harbor.lib.mkDevShell {
-        inherit pkgs craneLib cross;
-        enableWindowsEnv = false;
-        enableOsxcrossEnv = false;
-        checks = self.checks.${system};
-        packages = [pkgs.libcosmicAppHook] ++ commonArgs.buildInputs;
-      };
+      devShells.default =
+        (rs-harbor.lib.mkDevShell {
+          inherit pkgs craneLib cross;
+          enableWindowsEnv = false;
+          enableOsxcrossEnv = false;
+          checks = self.checks.${system};
+          packages = [pkgs.libcosmicAppHook] ++ commonArgs.buildInputs;
+        }).overrideAttrs (old: {
+          shellHook =
+            (old.shellHook or "")
+            + ''
+              for source in \
+                ${neverlight-mail-core}:neverlight-mail-core \
+                ${neverlight-mail-oauth}:neverlight-mail-oauth \
+                ${neverlight-mail-html-safe-md}:neverlight-mail-html-safe-md
+              do
+                target="$(dirname "$PWD")/''${source#*:}"
+                test -e "$target" || cp -r --no-preserve=mode "''${source%%:*}" "$target"
+              done
+            '';
+        });
     }))
     // {
       homeModules.default = homeModule;
