@@ -131,15 +131,16 @@
     "neverlight-mail-core": {
       "flake": false,
       "locked": {
-        "lastModified": 1774231239,
-        "narHash": "sha256-lURzM+LcN3/dAVkKIh5/oQHMdi1Iz5HH1iJueHfaB0w=",
-        "owner": "jstelzer",
+        "lastModified": 1785224291,
+        "narHash": "sha256-VIOIyn0Ep3LX2ECvoMj6v8MkvC0DuwtPw0pihX6Xtnc=",
+        "owner": "caniko",
         "repo": "neverlight-mail-core",
-        "rev": "013d2d5e33b2c4ad9562710f922f7326bf52c0ae",
+        "rev": "b33c7c60c9f77784d4587dc203c504f8c8f406f4",
         "type": "github"
       },
       "original": {
-        "owner": "jstelzer",
+        "owner": "caniko",
+        "ref": "agent/neverlight-managed-config",
         "repo": "neverlight-mail-core",
         "type": "github"
       }
@@ -163,15 +164,16 @@
     "neverlight-mail-oauth": {
       "flake": false,
       "locked": {
-        "lastModified": 1773456387,
-        "narHash": "sha256-y1kRa+NqZeWnB+r++AkaICbKAomWASEVU1kcL1PwHvI=",
-        "owner": "jstelzer",
+        "lastModified": 1785150486,
+        "narHash": "sha256-RIZs4kY4dN4q02IfYJKxq9qwqVDA0geLrw9qEdbY+rI=",
+        "owner": "caniko",
         "repo": "neverlight-mail-oauth",
-        "rev": "f6b50c7f194019450ccd35d5037e4d515f669235",
+        "rev": "560095ac2e3c952210d08d57c14484ce4b7461fa",
         "type": "github"
       },
       "original": {
-        "owner": "jstelzer",
+        "owner": "caniko",
+        "ref": "agent/neverlight-static-oauth",
         "repo": "neverlight-mail-oauth",
         "type": "github"
       }

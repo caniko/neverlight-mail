@@ -11,11 +11,11 @@
     # These crates are private path dependencies of the application and are
     # intentionally composed into the build source tree below.
     neverlight-mail-core = {
-      url = "github:jstelzer/neverlight-mail-core";
+      url = "github:caniko/neverlight-mail-core/agent/neverlight-managed-config";
       flake = false;
     };
     neverlight-mail-oauth = {
-      url = "github:jstelzer/neverlight-mail-oauth";
+      url = "github:caniko/neverlight-mail-oauth/agent/neverlight-static-oauth";
       flake = false;
     };
     neverlight-mail-html-safe-md = {
@@ -239,7 +239,10 @@
                 ${neverlight-mail-html-safe-md}:neverlight-mail-html-safe-md
               do
                 target="$(dirname "$PWD")/''${source#*:}"
-                test -e "$target" || cp -r --no-preserve=mode "''${source%%:*}" "$target"
+                if ! test -d "$target/.git"; then
+                  rm -rf "$target"
+                  cp -r --no-preserve=mode "''${source%%:*}" "$target"
+                fi
               done
             '';
         });
