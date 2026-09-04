@@ -2,10 +2,11 @@
   description = "Neverlight Mail — a COSMIC desktop email client";
 
   inputs = {
-    rs-harbor.url = "git+https://codeberg.org/caniko/rs-harbor.git?ref=trunk";
-    nixpkgs.follows = "rs-harbor/nixpkgs";
-    rust-overlay.follows = "rs-harbor/rust-overlay";
-    crane.follows = "rs-harbor/crane";
+    harbor-rs.url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk";
+    rs-harbor.follows = "harbor-rs";
+    nixpkgs.follows = "harbor-rs/nixpkgs";
+    rust-overlay.follows = "harbor-rs/rust-overlay";
+    crane.follows = "harbor-rs/crane";
     flake-utils.url = "github:numtide/flake-utils";
 
     # These crates are private path dependencies of the application and are
@@ -27,7 +28,7 @@
   outputs = {
     self,
     nixpkgs,
-    rs-harbor,
+    harbor-rs,
     rust-overlay,
     flake-utils,
     neverlight-mail-core,
@@ -149,7 +150,7 @@
         inherit system;
         overlays = [(import rust-overlay)];
       };
-      toolchain = rs-harbor.lib.mkToolchain {
+      toolchain = harbor-rs.lib.mkToolchain {
         inherit pkgs;
         # The upstream CI uses stable; keep the package reproducible without
         # requiring nightly-only compiler behavior.
@@ -158,7 +159,7 @@
         withRustAnalyzer = false;
       };
       inherit (toolchain) craneLib;
-      cross = rs-harbor.lib.mkCross {
+      cross = harbor-rs.lib.mkCross {
         inherit pkgs system;
         enableOsxcross = false;
       };
@@ -223,7 +224,7 @@
       };
 
       devShells.default =
-        (rs-harbor.lib.mkDevShell {
+        (harbor-rs.lib.mkDevShell {
           inherit pkgs craneLib cross;
           enableWindowsEnv = false;
           enableOsxcrossEnv = false;
